@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
+*.local
+.env
+.env.local
+
+# Build artifacts
+dist/
+build/
+*.js.map
+*.sourcemaps
