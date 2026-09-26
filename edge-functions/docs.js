@@ -73,7 +73,7 @@ th{color:var(--muted);font-weight:500}
 <thead><tr><th>参数</th><th>说明</th></tr></thead>
 <tbody>
 <tr><td><code>ac</code></td><td>动作。<code>list</code> / <code>detail</code> / <code>videolist</code>。省略时按 <code>ids</code> 或 <code>type_id</code> 推断。</td></tr>
-<tr><td><code>ids</code> / <code>id</code></td><td>详情 id，AppCMS 主键 <code>vod_id</code>。等价于上游 <code>vod_id</code>。</td></tr>
+<tr><td><code>ids</code> / <code>movie</code></td><td>详情 id，AppCMS 主键 <code>vod_id</code>。等价于上游 <code>vod_id</code>。</td></tr>
 <tr><td><code>type_id</code> / <code>t</code></td><td>分类 id。<code>1</code>=电影 <code>2</code>=连续剧 <code>3</code>=综艺 <code>4</code>=动漫 <code>64</code>=短剧。</td></tr>
 <tr><td><code>wd</code> / <code>word</code> / <code>keyword</code></td><td>搜索关键词。</td></tr>
 <tr><td><code>page</code></td><td>页码，从 1 起。</td></tr>
@@ -92,9 +92,8 @@ curl 'https://${'$HOST'}/?ac=list&amp;type_id=1&amp;page=1'
 # 搜索「肖」
 curl 'https://${'$HOST'}/?ac=list&amp;wd=肖'
 
-# 详情（支持 ids 或 id 别名）
-curl 'https://${'$HOST'}/?ac=detail&amp;ids=3'
-curl 'https://${'$HOST'}/?ac=detail&amp;id=3'</pre>
+# 详情
+curl 'https://${'$HOST'}/?ac=detail&amp;ids=3'</pre>
 
 <h2>响应格式（AppCMS V10 标准）</h2>
 <div class="card">

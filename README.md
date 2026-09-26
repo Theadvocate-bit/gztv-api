@@ -19,8 +19,6 @@ curl 'https://<YOUR-EDGEONE-HOST>/?ac=list&page=1&limit=20'
 curl 'https://<YOUR-EDGEONE-HOST>/?ac=list&type_id=1&limit=10'
 # 详情：AppCMS 标准参数 ids=
 curl 'https://<YOUR-EDGEONE-HOST>/?ac=detail&ids=3'
-# 详情：id= 别名同样支持
-curl 'https://<YOUR-EDGEONE-HOST>/?ac=detail&id=3'
 # 直链解析
 curl 'https://<YOUR-EDGEONE-HOST>/play?vod_id=3&episode=1'
 # m3u8 代理
@@ -68,7 +66,7 @@ curl 'https://<YOUR-EDGEONE-HOST>/api/m3u8?url=https%3A%2F%2Fexample.com%2Fa.m3u
 | 参数 | 说明 |
 |---|---|
 | `ac` | 动作：`list` / `detail` / `videolist`。省略时按 `ids` 或 `type_id` 推断。 |
-| `ids` 或 `id` 或 `movie` | 详情 id（AppCMS `vod_id`），AppCMS 惯例是复数 `ids`；我们兼容单数 `id`。 |
+| `ids` 或 `movie` | 详情 id（AppCMS `vod_id`）。AppCMS 惯例是复数 `ids`。 |
 | `type_id` 或 `t` | 分类 id（见上表）。 |
 | `wd` 或 `word` 或 `keyword` | 搜索关键词。 |
 | `page` | 页码，从 1 起。 |
@@ -191,7 +189,7 @@ node tools/smoke_test.mjs       # 25/25 单元测试，不需要网络
 node tools/integration_test.mjs # 10/10 集成测试，需要访问 gztv5 上游
 ```
 
-测试覆盖：上游双主备、主备故障切换、缓存读写、AppCMS 详情/列表/搜索/分类、播放解析、m3u8 代理、错误路径、id/ids 别名、EdgeOne 打包边界（无越界 import）。
+测试覆盖：上游双主备、主备故障切换、缓存读写、AppCMS 详情/列表/搜索/分类、播放解析、m3u8 代理、错误路径、EdgeOne 打包边界（无越界 import）。
 
 ## 7. 安全
 

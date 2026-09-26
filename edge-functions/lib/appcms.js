@@ -166,7 +166,7 @@ export function errorEnvelope({ msg = '资源不存在或已下架', page = 1, p
 export function parseQuery(url) {
   const u = new URL(url);
   const q = Object.fromEntries(u.searchParams.entries());
-  const ids = q.ids || q.id || q.movie || '';
+  const ids = q.ids || q.movie || '';
   return {
     ac: q.ac || (ids ? 'detail' : 'list'),
     ids,

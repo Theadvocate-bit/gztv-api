@@ -83,15 +83,6 @@ await test('GET detail returns full record with play URL', async () => {
   assert.ok(parts.length >= 4, `expected at least 2 episodes, got ${parts.length} parts`);
 });
 
-await test('detail with id alias (not ids) works', async () => {
-  const req = new Request('https://x.test/?ac=detail&id=3');
-  const res = await handlers.buildAppCmsHandler(req);
-  const data = await parseJSON(res);
-  assert.equal(data.code, 1);
-  assert.equal(data.list.length, 1);
-  assert.equal(data.list[0].vod_id, '3');
-});
-
 await test('detail with unknown id returns error envelope', async () => {
   const req = new Request('https://x.test/?ac=detail&ids=99999999');
   const res = await handlers.buildAppCmsHandler(req);
