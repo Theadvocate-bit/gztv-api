@@ -25,10 +25,30 @@ export const TYPE_NAMES = {
   73: '电影解说', 74: 'AI漫剧'
 };
 
-// Convert upstream list item -> AppCMS V10 minimal list item (8 fields)
+// Convert upstream list item -> AppCMS V10 list item.
+// Standard AppCMS V10 uses 8 fields, but MoonTV/LunaTV require vod_pic,
+// vod_year, vod_class, vod_content, vod_play_url etc. for rendering cards
+// and extracting m3u8 URLs via regex /\$(https?:\/\/[^"'\s]+?\.m3u8)/g.
 export function formatListItem(item) {
   const typeId = TYPE_MAP[item.t_id] ?? item.t_id;
   const typeName = TYPE_NAMES[item.t_id] || TYPE_NAMES[typeId] || '';
+
+  // Build vod_play_url from vurlList if available.
+  // Upstream list only has vurl_id (not actual URL), so this is best-effort.
+  // MoonTV expects: "ep1Name$url1#ep2Name$url2#..." — '$' separates name/url.
+  let playUrl = '';
+  if (Array.isArray(item.vurlList) && item.vurlList.length > 0) {
+    playUrl = item.vurlList
+      .map(e => `${e.name || e.sort || ''}$${e.url || ''}`)
+      .join('#');
+  }
+
+  // vod_class: strip leading/trailing zeros (",98,0," -> "98")
+  let vodClass = item.d_class || '';
+  if (vodClass) {
+    vodClass = vodClass.split(',').filter(p => p && p !== '0').join(',');
+  }
+
   return {
     vod_id: String(item.vod_id),
     vod_name: item.vod_name || '',
@@ -36,8 +56,25 @@ export function formatListItem(item) {
     type_name: typeName,
     vod_en: '',
     vod_time: item.vod_filmtime || item.vod_year || '',
+    vod_year: item.vod_year || '',
+    vod_area: item.vod_area || '',
+    vod_class: vodClass,
+    vod_score: item.vod_scroe || '',
+    vod_blurb: item.vod_title || '',
     vod_remarks: item.new_continue || item.vod_continu || item.vod_remarks || '',
-    vod_play_from: 'gztv5'
+    vod_actor: typeof item.vod_actor === 'string' ? item.vod_actor
+      : Array.isArray(item.vod_actor) ? item.vod_actor.join(',') : '',
+    vod_director: typeof item.vod_directed === 'string' ? item.vod_directed
+      : Array.isArray(item.vod_directed) ? item.vod_directed.join(',') : '',
+    vod_content: '',
+    vod_pic: item.vod_pic || '',
+    vod_play_from: 'gztv5',
+    vod_play_url: playUrl,
+    vod_douban_id: '',
+    vod_douban_score: item.vod_scroe || '',
+    is_end: item.is_end ? '1' : '0',
+    vod_updatetime: '',
+    vod_addtime: item.vod_addtime || ''
   };
 }
 
@@ -171,12 +208,15 @@ export function parseQuery(url) {
   const u = new URL(url);
   const q = Object.fromEntries(u.searchParams.entries());
   const ids = q.ids || q.movie || '';
+  // MoonTV uses ac=videolist (not ac=list); accept both.
+  const acRaw = q.ac || (ids ? 'detail' : 'list');
   return {
-    ac: q.ac || (ids ? 'detail' : 'list'),
+    ac: acRaw,
     ids,
     type_id: q.type_id ? parseInt(q.type_id, 10) : (q.t ? parseInt(q.t, 10) : 0),
     wd: q.wd || q.word || q.keyword || '',
-    page: q.page ? parseInt(q.page, 10) : 1,
+    // MoonTV uses 'pg' for page number; accept both 'page' and 'pg'
+    page: q.page ? parseInt(q.page, 10) : (q.pg ? parseInt(q.pg, 10) : 1),
     limit: q.limit ? parseInt(q.limit, 10) : 20,
     by: q.by || 'time',
     t: q.t ? parseInt(q.t, 10) : 0,
