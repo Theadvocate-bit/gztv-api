@@ -41,11 +41,11 @@ function notFound(text = '资源不存在或已下架') {
 }
 
 async function fetchSearch({ page, limit, keyword, typeId }) {
+  // Upstream expects "keywords" (plural). Older param names wd/name/keyword
+  // are silently ignored and return the full 145k default list.
   const body = { page, pageSize: limit };
   if (keyword) {
-    body.wd = keyword;
-    body.name = keyword;
-    body.keyword = keyword;
+    body.keywords = keyword;
   }
   if (typeId) body.column = typeId;
   const raw = await searchCondition(body);
