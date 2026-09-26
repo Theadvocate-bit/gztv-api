@@ -67,37 +67,43 @@ async function handleList(query) {
   const pageSize = Math.min(Math.max(limit, 1), 100);
   const cacheKey = `list:${type_id || 0}:${wd || ''}:${page}:${pageSize}`;
 
-  const data = await getCached(cacheKey, LIST_TTL, async () => {
-    const { items, total } = await fetchSearch({
-      page, limit: pageSize,
-      keyword: wd || '',
-      typeId: type_id || 0
-    });
+  try {
+    const data = await getCached(cacheKey, LIST_TTL, async () => {
+      const { items, total } = await fetchSearch({
+        page, limit: pageSize,
+        keyword: wd || '',
+        typeId: type_id || 0
+      });
 
-    // Top up if client-side filter reduced items below pageSize
-    if (type_id && items.length < pageSize) {
-      const extraPages = 4;
-      for (let i = 1; i <= extraPages && items.length < pageSize; i++) {
-        const extra = await fetchSearch({
-          page: page + i, limit: pageSize,
-          keyword: wd || '',
-          typeId: type_id || 0
-        });
-        if (!extra.items.length) break;
-        items.push(...extra.items);
+      // Top up if client-side filter reduced items below pageSize
+      if (type_id && items.length < pageSize) {
+        const extraPages = 4;
+        for (let i = 1; i <= extraPages && items.length < pageSize; i++) {
+          const extra = await fetchSearch({
+            page: page + i, limit: pageSize,
+            keyword: wd || '',
+            typeId: type_id || 0
+          });
+          if (!extra.items.length) break;
+          items.push(...extra.items);
+        }
       }
-    }
 
-    const list = items.map(formatListItem);
-    const pagecount = Math.max(1, Math.ceil(total / pageSize));
+      const list = items.map(formatListItem);
+      const pagecount = Math.max(1, Math.ceil(total / pageSize));
 
-    return envelope({
-      code: 1, msg: '数据列表',
-      page, pagecount, limit: pageSize, total, list
+      return envelope({
+        code: 1, msg: '数据列表',
+        page, pagecount, limit: pageSize, total, list
+      });
     });
-  });
 
-  return okBody(data, 'public, max-age=600');
+    return okBody(data, 'public, max-age=600');
+  } catch (e) {
+    return okBody(errorEnvelope({
+      msg: '上游暂不可用：' + (e && e.message || 'unknown')
+    }), 'public, max-age=60');
+  }
 }
 
 async function handleDetail(query) {
@@ -106,23 +112,29 @@ async function handleDetail(query) {
 
   const cacheKey = `detail:${id}`;
 
-  const data = await getCached(cacheKey, DETAIL_TTL, async () => {
-    const [info, plays] = await Promise.all([
-      getVodInfo(id).catch(() => null),
-      getOnePlayList(id, { maxPages: 20 }).catch(() => ({ urls: [], total: 0 }))
-    ]);
+  try {
+    const data = await getCached(cacheKey, DETAIL_TTL, async () => {
+      const [info, plays] = await Promise.all([
+        getVodInfo(id).catch(() => null),
+        getOnePlayList(id, { maxPages: 20 }).catch(() => ({ urls: [], total: 0 }))
+      ]);
 
-    const vodInfo = info && info.data && info.data.vodInfo;
-    if (!vodInfo) {
-      return errorEnvelope({ msg: '资源不存在或已下架' });
-    }
+      const vodInfo = info && info.data && info.data.vodInfo;
+      if (!vodInfo) {
+        return errorEnvelope({ msg: '资源不存在或已下架' });
+      }
 
-    const episodes = plays.urls || [];
-    const item = formatDetailItem(vodInfo, episodes, query.type_id || 0);
-    return detailEnvelope({ page: 1, pagecount: 1, limit: 1, total: 1, list: [item] });
-  });
+      const episodes = plays.urls || [];
+      const item = formatDetailItem(vodInfo, episodes, query.type_id || 0);
+      return detailEnvelope({ page: 1, pagecount: 1, limit: 1, total: 1, list: [item] });
+    });
 
-  return okBody(data, 'public, max-age=1800');
+    return okBody(data, 'public, max-age=1800');
+  } catch (e) {
+    return okBody(errorEnvelope({
+      msg: '上游暂不可用：' + (e && e.message || 'unknown')
+    }), 'public, max-age=60');
+  }
 }
 
 export async function buildAppCmsHandler(request) {

@@ -1,31 +1,36 @@
 // Upstream client for gztv5.com backend API
-// Domain rotation: overseas + domestic failover
+// Primary: haiwaiapi.1fc8ab0.com (Cloudflare, stable globally)
+// Failover list is checked in order; if a base returns HTTP error we skip it.
 
 const BASES = [
-  'https://haiwaiapi.1fc8ab0.com',
-  'https://api.txxhuc.com'
+  'https://haiwaiapi.1fc8ab0.com'
 ];
+
+// If extra bases are provided via env var, they get added.
+// Format: CACHE_UPSTREAM_BASES=https://a.example.com,https://b.example.com
+function getBases() {
+  try {
+    const env = (typeof process !== 'undefined' && process.env) || globalThis.env || {};
+    const extra = env.CACHE_UPSTREAM_BASES || '';
+    if (extra) {
+      const list = extra.split(',').map(s => s.trim()).filter(Boolean);
+      return [...list, ...BASES];
+    }
+  } catch (_) { /* ignore */ }
+  return BASES;
+}
 
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148';
 
-let preferredIdx = 0;
-
-function rotatePreferred() {
-  preferredIdx = (preferredIdx + 1) % BASES.length;
-}
-
 export async function postUpstream(path, body, opts = {}) {
-  const bases = [
-    BASES[preferredIdx],
-    BASES[(preferredIdx + 1) % BASES.length]
-  ];
+  const bases = getBases();
 
   let lastErr = null;
   for (let i = 0; i < bases.length; i++) {
     const base = bases[i];
     const url = `${base}${path}`;
     const ctrl = new AbortController();
-    const timeout = opts.timeout ?? 8000;
+    const timeout = opts.timeout ?? 10000;
     const tid = setTimeout(() => ctrl.abort(), timeout);
 
     try {
@@ -47,7 +52,6 @@ export async function postUpstream(path, body, opts = {}) {
         continue;
       }
       const data = await res.json();
-      if (i === 1) rotatePreferred();
       return data;
     } catch (e) {
       clearTimeout(tid);
