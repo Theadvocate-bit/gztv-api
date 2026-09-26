@@ -37,7 +37,8 @@ const snapshot = {
   generated_at: new Date().toISOString(),
   upstream: BASE,
   list: {},
-  detail: {}
+  detail: {},
+  catalog: null
 };
 
 // Fetch a big default list, then client-side filter by t_id.
@@ -106,6 +107,15 @@ for (const vid of detailIds) {
   } catch (e) {
     console.error(`  detail ${vid}: FAILED - ${e.message}`);
   }
+}
+
+// Catalog / condition tree — used by /api/catalog when upstream is blocked
+try {
+  const catRaw = await post('/Pc/Search/GetCondition', {});
+  snapshot.catalog = catRaw;
+  console.log('\nCatalog snapshot: fetched');
+} catch (e) {
+  console.error(`\nCatalog snapshot: FAILED - ${e.message}`);
 }
 
 mkdirSync('data', { recursive: true });

@@ -281,13 +281,37 @@ export function handleHealth() {
     service: 'gztv-api',
     upstream: 'gztv5.com',
     cache: cacheStats(),
+    snapshot: {
+      generated_at: SNAPSHOT.generated_at,
+      types: Object.keys(SNAPSHOT.list || {}).length,
+      details: Object.keys(SNAPSHOT.detail || {}).length
+    },
     ts: new Date().toISOString()
   });
 }
 
 export async function handleCatalog() {
-  const { getCondition } = await import('../lib/upstream.js');
   const CACHE_TTL = 24 * 3600 * 1000;
-  const data = await getCached('catalog:conditions', CACHE_TTL, () => getCondition());
-  return okBody(data);
+  try {
+    const data = await getCached('catalog:conditions', CACHE_TTL, async () => {
+      try {
+        const { getCondition } = await import('../lib/upstream.js');
+        return await getCondition();
+      } catch (_) {
+        // Upstream unreachable — return snapshot catalog
+        return SNAPSHOT.catalog || {
+          code: 200,
+          data: {},
+          msg: 'upstream unavailable, using bundled snapshot'
+        };
+      }
+    });
+    return okBody(data);
+  } catch (e) {
+    return okBody({
+      code: 0,
+      msg: 'catalog failed: ' + (e && e.message || 'unknown'),
+      data: SNAPSHOT.catalog || null
+    });
+  }
 }
