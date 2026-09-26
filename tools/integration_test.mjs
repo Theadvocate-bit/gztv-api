@@ -79,8 +79,16 @@ await test('GET detail returns full record with play URL', async () => {
   assert.equal(d.type_name, '动漫');
   assert.equal(d.vod_play_from, 'gztv5');
   assert.ok(d.vod_play_url.length > 0, 'expected play_url');
-  const parts = d.vod_play_url.split('#');
-  assert.ok(parts.length >= 4, `expected at least 2 episodes, got ${parts.length} parts`);
+  // AppCMS V10 format: "epName$url#epName$url#..."
+  // '$' separates name from URL; '#' separates episodes.
+  const eps = d.vod_play_url.split('#');
+  assert.ok(eps.length >= 1, `expected at least 1 episode, got ${eps.length}`);
+  for (const ep of eps) {
+    assert.ok(ep.includes('$'), `episode '${ep.slice(0, 40)}' missing $ separator`);
+    const parts = ep.split('$');
+    assert.ok(parts.length === 2, `episode must be exactly 'name$url'`);
+    assert.ok(parts[1].startsWith('http'), `episode url must start with http: got '${parts[1].slice(0, 40)}'`);
+  }
 });
 
 await test('detail with unknown id returns error envelope', async () => {

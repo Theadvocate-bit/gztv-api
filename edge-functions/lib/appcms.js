@@ -55,8 +55,12 @@ export function formatDetailItem(vodInfo, playList, typeIdOverride) {
 
   const eps = playList || [];
   const playFrom = 'gztv5';
+  // AppCMS V10 vod_play_url format:
+  //   vod_play_url = "ep1Name$url1#ep2Name$url2#..."
+  // '$' separates episode name from URL, '#' separates episodes.
+  // Multiple sources are split by '$$$' inside vod_play_from / vod_play_url.
   const playUrl = eps
-    .map(e => `${e.name || e.sort || ''}#${e.url || ''}`)
+    .map(e => `${e.name || e.sort || ''}$${e.url || ''}`)
     .join('#');
 
   const vodActor = typeof vodInfo.vod_actor === 'string'

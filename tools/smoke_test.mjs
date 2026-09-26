@@ -120,8 +120,8 @@ test('builds $$$ / # separated play URL', () => {
   assert.equal(d.type_id, 4);
   assert.equal(d.type_name, '动漫');
   assert.equal(d.vod_play_from, 'gztv5');
-  // Two episodes separated by #, each with name#url
-  assert.equal(d.vod_play_url, '01#https://a.m3u8#02#https://b.m3u8');
+  // AppCMS V10: two episodes separated by '#', each with 'name$url'
+  assert.equal(d.vod_play_url, '01$https://a.m3u8#02$https://b.m3u8');
   assert.equal(d.vod_actor, '铃木实里,寺崎裕香');
   assert.equal(d.vod_director, '传沙织');
   assert.equal(d.vod_tags, '动漫,日本动漫');

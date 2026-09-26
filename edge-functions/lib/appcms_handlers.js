@@ -21,7 +21,7 @@ function jsonBody(data, opts = {}) {
   return new Response(JSON.stringify(data), {
     status: 200,
     headers: corsHeaders({
-      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=600',
       ...opts
     })
@@ -30,7 +30,7 @@ function jsonBody(data, opts = {}) {
 
 function okBody(data, cacheControl) {
   const headers = {
-    'Content-Type': 'application/json; charset=utf-8'
+    'Content-Type': 'text/html; charset=utf-8'
   };
   if (cacheControl) headers['Cache-Control'] = cacheControl;
   return new Response(JSON.stringify(data), { status: 200, headers: corsHeaders(headers) });
