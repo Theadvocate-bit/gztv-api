@@ -1,5 +1,6 @@
 import { getCached, cacheStats } from '../lib/cache.js';
 import { searchCondition, getVodInfo, getOnePlayList } from '../lib/upstream.js';
+import { SNAPSHOT } from '../lib/snapshot.js';
 import {
   formatListItem,
   formatDetailItem,
@@ -7,11 +8,14 @@ import {
   errorEnvelope,
   detailEnvelope,
   parseQuery,
-  corsHeaders
+  corsHeaders,
+  TYPE_MAP,
+  TYPE_NAMES
 } from '../lib/appcms.js';
 
 const LIST_TTL = 10 * 60 * 1000;      // 10 min
 const DETAIL_TTL = 30 * 60 * 1000;    // 30 min
+const SNAP_TTL = 60 * 60 * 1000;      // 1 h (snapshot is stale by design)
 
 function jsonBody(data, opts = {}) {
   return new Response(JSON.stringify(data), {
@@ -62,46 +66,82 @@ async function fetchSearch({ page, limit, keyword, typeId }) {
   };
 }
 
+// Fallback: read from bundled snapshot when upstream is unreachable.
+function snapshotSearch({ page, limit, keyword, typeId }) {
+  // Snapshot stores the full fetched list bucketed by type (already filtered).
+  // For 'all' (typeId=0), we merge every bucket.
+  const snap = SNAPSHOT.list || {};
+  let pool;
+  if (typeId) {
+    pool = (snap[String(typeId)] && snap[String(typeId)].items) || [];
+  } else {
+    pool = [];
+    for (const k of Object.keys(snap)) {
+      const bucket = snap[k] && snap[k].items;
+      if (bucket) for (const it of bucket) pool.push(it);
+    }
+  }
+  // Keyword search
+  if (keyword) {
+    const kw = keyword.toLowerCase();
+    pool = pool.filter(v => (v.vod_name || '').toLowerCase().includes(kw));
+  }
+  const start = (page - 1) * limit;
+  const items = pool.slice(start, start + limit);
+  return { items, total: pool.length };
+}
+
+function snapshotDetail(vodId) {
+  const snap = SNAPSHOT.detail || {};
+  return snap[String(vodId)] || null;
+}
+
 async function handleList(query) {
   const { type_id, wd, page, limit } = query;
   const pageSize = Math.min(Math.max(limit, 1), 100);
   const cacheKey = `list:${type_id || 0}:${wd || ''}:${page}:${pageSize}`;
 
   try {
-    const data = await getCached(cacheKey, LIST_TTL, async () => {
-      const { items, total } = await fetchSearch({
+    let items, total;
+    let source = 'upstream';
+
+    try {
+      const result = await fetchSearch({
         page, limit: pageSize,
         keyword: wd || '',
         typeId: type_id || 0
       });
-
-      // Top up if client-side filter reduced items below pageSize
-      if (type_id && items.length < pageSize) {
-        const extraPages = 4;
-        for (let i = 1; i <= extraPages && items.length < pageSize; i++) {
-          const extra = await fetchSearch({
-            page: page + i, limit: pageSize,
-            keyword: wd || '',
-            typeId: type_id || 0
-          });
-          if (!extra.items.length) break;
-          items.push(...extra.items);
-        }
-      }
-
-      const list = items.map(formatListItem);
-      const pagecount = Math.max(1, Math.ceil(total / pageSize));
-
-      return envelope({
-        code: 1, msg: '数据列表',
-        page, pagecount, limit: pageSize, total, list
+      items = result.items;
+      total = result.total;
+    } catch (_) {
+      // Upstream unreachable — fall back to bundled snapshot
+      source = 'snapshot';
+      const result = snapshotSearch({
+        page, limit: pageSize,
+        keyword: wd || '',
+        typeId: type_id || 0
       });
+      items = result.items;
+      total = result.total;
+    }
+
+    const list = items.map(formatListItem);
+    const pagecount = Math.max(1, Math.ceil(total / pageSize));
+
+    const data = envelope({
+      code: 1, msg: '数据列表',
+      page, pagecount, limit: pageSize, total, list
     });
 
-    return okBody(data, 'public, max-age=600');
+    // Snapshot data shouldn't be long-cached; upstream data can.
+    const ttl = source === 'snapshot' ? SNAP_TTL : LIST_TTL;
+    const wrapped = await getCached(cacheKey + ':' + source, ttl, async () => data);
+    return okBody(wrapped, source === 'snapshot'
+      ? 'public, max-age=600'
+      : 'public, max-age=1800');
   } catch (e) {
     return okBody(errorEnvelope({
-      msg: '上游暂不可用：' + (e && e.message || 'unknown')
+      msg: '上游与快照都不可用：' + (e && e.message || 'unknown')
     }), 'public, max-age=60');
   }
 }
@@ -114,17 +154,26 @@ async function handleDetail(query) {
 
   try {
     const data = await getCached(cacheKey, DETAIL_TTL, async () => {
-      const [info, plays] = await Promise.all([
-        getVodInfo(id).catch(() => null),
-        getOnePlayList(id, { maxPages: 20 }).catch(() => ({ urls: [], total: 0 }))
-      ]);
+      let vodInfo, episodes;
+      let source = 'upstream';
 
-      const vodInfo = info && info.data && info.data.vodInfo;
-      if (!vodInfo) {
-        return errorEnvelope({ msg: '资源不存在或已下架' });
+      try {
+        const [info, plays] = await Promise.all([
+          getVodInfo(id),
+          getOnePlayList(id, { maxPages: 20 })
+        ]);
+        vodInfo = info && info.data && info.data.vodInfo;
+        episodes = (plays && plays.urls) || [];
+      } catch (_) {
+        source = 'snapshot';
+        const snap = snapshotDetail(id);
+        if (!snap) return errorEnvelope({ msg: '资源不存在或已下架' });
+        vodInfo = snap.vodInfo;
+        episodes = snap.playList || [];
       }
 
-      const episodes = plays.urls || [];
+      if (!vodInfo) return errorEnvelope({ msg: '资源不存在或已下架' });
+
       const item = formatDetailItem(vodInfo, episodes, query.type_id || 0);
       return detailEnvelope({ page: 1, pagecount: 1, limit: 1, total: 1, list: [item] });
     });
@@ -132,7 +181,7 @@ async function handleDetail(query) {
     return okBody(data, 'public, max-age=1800');
   } catch (e) {
     return okBody(errorEnvelope({
-      msg: '上游暂不可用：' + (e && e.message || 'unknown')
+      msg: '上游与快照都不可用：' + (e && e.message || 'unknown')
     }), 'public, max-age=60');
   }
 }

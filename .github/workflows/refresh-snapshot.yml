@@ -1,0 +1,42 @@
+# Refresh data/snapshot.json periodically so EdgeOne has a working fallback
+# when Cloudflare WAF blocks EdgeOne's edge-node IPs.
+name: refresh-snapshot
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # every 30 minutes
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/gen_snapshot.mjs'
+      - 'edge-functions/lib/snapshot.js'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate snapshot
+        run: node tools/gen_snapshot.mjs
+
+      - name: Commit snapshot if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/snapshot.json edge-functions/lib/snapshot.js
+          if git diff --cached --quiet; then
+            echo "no changes"
+          else
+            node -e "const d=JSON.parse(require('fs').readFileSync('data/snapshot.json','utf8'));const t=new Date();console.log('committed at',t.toISOString())"
+            git commit -m "chore(snapshot): refresh upstream data [skip ci]"
+            git push origin HEAD:main
+          fi
