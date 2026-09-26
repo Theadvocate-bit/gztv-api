@@ -1,5 +1,5 @@
 // Upstream client for gztv5.com backend API
-// Domain rotation: domestic + overseas fallback
+// Domain rotation: overseas + domestic failover
 
 const BASES = [
   'https://haiwaiapi.1fc8ab0.com',
@@ -9,6 +9,10 @@ const BASES = [
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148';
 
 let preferredIdx = 0;
+
+function rotatePreferred() {
+  preferredIdx = (preferredIdx + 1) % BASES.length;
+}
 
 export async function postUpstream(path, body, opts = {}) {
   const bases = [
@@ -39,12 +43,11 @@ export async function postUpstream(path, body, opts = {}) {
       clearTimeout(tid);
 
       if (!res.ok) {
-        lastErr = new Error(`HTTP ${res.status}`);
+        lastErr = new Error(`HTTP ${res.status} from ${base}`);
         continue;
       }
       const data = await res.json();
-      // Switch preferred base if this one worked and wasn't first choice
-      if (i === 1) preferredIdx = (preferredIdx + 1) % BASES.length;
+      if (i === 1) rotatePreferred();
       return data;
     } catch (e) {
       clearTimeout(tid);
@@ -56,14 +59,12 @@ export async function postUpstream(path, body, opts = {}) {
 
 // Search — list with filtering
 export async function searchCondition(body) {
-  const d = await postUpstream('/Pc/Search/GetConditionList', body);
-  return d;
+  return await postUpstream('/Pc/Search/GetConditionList', body);
 }
 
 // Full vod metadata (includes first-episode play_url as `play_url`)
 export async function getVodInfo(vodId) {
-  const d = await postUpstream('/Pc/Resource/GetVodInfo', { vod_id: vodId });
-  return d;
+  return await postUpstream('/Pc/Resource/GetVodInfo', { vod_id: vodId });
 }
 
 // All episodes of a vod — paginated (24 per page)
@@ -72,6 +73,7 @@ export async function getOnePlayList(vodId, opts = {}) {
   const page_size = 24;
   let page = 1;
   let total = 0;
+  const maxPages = opts.maxPages || 20;
   do {
     const d = await postUpstream('/Pc/Resource/GetOnePlayList', {
       vod_id: vodId,
@@ -83,14 +85,13 @@ export async function getOnePlayList(vodId, opts = {}) {
     const urls = data.urls || [];
     for (const u of urls) out.push(u);
     if (urls.length < page_size) break;
-    if (opts.maxPages && page >= opts.maxPages) break;
+    if (page >= maxPages) break;
     page++;
   } while (out.length < total);
   return { urls: out, total };
 }
 
-// Category tree from upstream (for /class discovery)
+// Category tree from upstream
 export async function getCondition() {
-  const d = await postUpstream('/Pc/Search/GetCondition', {});
-  return d;
+  return await postUpstream('/Pc/Search/GetCondition', {});
 }

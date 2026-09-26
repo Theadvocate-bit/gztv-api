@@ -1,18 +1,14 @@
-// edge-functions/index.js — GET / (AppCMS V10 main entry)
-// The root URL acts as the AppCMS V10 collector endpoint.
-// Apple CMS clients typically use /api.php/provide/vod; we support both.
+// edge-functions/api/appcms.js — GET/POST /api/appcms
+// Apple CMS V10 collector alias
 
-import { buildAppCmsHandler } from './lib/appcms_handlers.js';
-import { corsHeaders } from './lib/appcms.js';
+import { buildAppCmsHandler } from '../lib/appcms_handlers.js';
+import { corsHeaders } from '../lib/appcms.js';
 
 export async function onRequest(context) {
   const { request } = context;
 
   if (request.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders({})
-    });
+    return new Response(null, { status: 204, headers: corsHeaders({}) });
   }
 
   try {

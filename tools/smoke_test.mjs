@@ -155,10 +155,10 @@ test('normalizes vod_class comma separators', () => {
 });
 
 console.log('\n=== envelope ===');
-test('returns AppCMS V10 top-level envelope', () => {
+test('returns AppCMS V10 top-level envelope (code=1, msg=数据列表)', () => {
   const e = envelope({ page: 1, pagecount: 25, limit: 20, total: 500, list: [{ vod_id: '1' }] });
-  assert.equal(e.code, 200);
-  assert.equal(e.msg, '请求成功');
+  assert.equal(e.code, 1);
+  assert.equal(e.msg, '数据列表');
   assert.equal(e.page, '1');
   assert.equal(e.pagecount, '25');
   assert.equal(e.limit, '20');
@@ -282,8 +282,10 @@ await atest('cacheStats returns size info', async () => {
 });
 
 console.log('\n=== edge-functions import boundary ===');
-await atest('all lib files live inside edge-functions/', async () => {
+await atest('all lib files stay within edge-functions/', async () => {
   const { readFileSync, readdirSync, statSync } = await import('node:fs').then(m => m.default);
+  const { resolve, dirname } = await import('node:path');
+
   const walk = (dir, out = []) => {
     for (const name of readdirSync(dir)) {
       const p = `${dir}/${name}`;
@@ -295,13 +297,19 @@ await atest('all lib files live inside edge-functions/', async () => {
   };
   const files = walk('edge-functions');
   assert.ok(files.length >= 4, `expected ≥4 edge files, got ${files.length}`);
-  // No import should escape edge-functions/ (no `../` outside the tree)
+
+  const root = resolve('edge-functions');
+  // No import should escape the edge-functions/ tree — EdgeOne only bundles files
+  // inside this directory, so any sibling-of-parent reference would break at deploy.
   for (const f of files) {
     const src = readFileSync(f, 'utf8');
-    // Match `from '../...` — banned because EdgeOne doesn't package files outside edge-functions/
-    const bad = src.matchAll(/from\s+['"]\.\.\/[^'"]+['"]/g);
-    for (const m of bad) {
-      assert.fail(`${f}: escapes edge-functions/ via ${m[0]}`);
+    const imports = [...src.matchAll(/from\s+['"]([^'"]+)['"]/g)].map(m => m[1]);
+    for (const imp of imports) {
+      if (imp.startsWith('.')) {
+        const resolved = resolve(dirname(f), imp);
+        assert.ok(resolved.startsWith(root + '/'),
+          `${f} escapes edge-functions/ via '${imp}' -> ${resolved}`);
+      }
     }
   }
 });

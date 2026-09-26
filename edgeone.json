@@ -1,3 +1,4 @@
 {
-  "functions": "./edge-functions"
+  "buildCommand": "echo 'no build needed'",
+  "functionsDirectory": "edge-functions"
 }

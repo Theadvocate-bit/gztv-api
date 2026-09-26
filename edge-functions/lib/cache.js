@@ -1,12 +1,11 @@
 // Edge cache: in-memory LRU with TTL (per isolated edge instance).
-// Optional upstream cache layer via env vars (CACHE_UPSTREAM_URL + CACHE_UPSTREAM_KEY)
-// for cross-instance persistence when available.
+// Optional upstream cache layer via env vars (CACHE_UPSTREAM_URL + CACHE_UPSTREAM_KEY).
 
 const store = new Map();
 const MAX = 512;
 
 function env() {
-  try { return (typeof process !== 'undefined' && process.env) || (globalThis.env) || {}; }
+  try { return (typeof process !== 'undefined' && process.env) || globalThis.env || {}; }
   catch (_) { return {}; }
 }
 
