@@ -14,6 +14,12 @@ on:
 permissions:
   contents: write
 
+# Prevent overlapping runs piling up when a refresh runs long — the source of
+# hundreds of redundant "chore(snapshot)" commits when upstream is slow.
+concurrency:
+  group: refresh-snapshot
+  cancel-in-progress: true
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -26,6 +32,9 @@ jobs:
           node-version: '20'
 
       - name: Generate snapshot
+        # gen_snapshot exits non-zero if the fresh snapshot is degenerate
+        # (< MIN_TOTAL_ITEMS, or <50% of the existing one). Failing here keeps
+        # the last good snapshot instead of committing a broken fallback.
         run: node tools/gen_snapshot.mjs
 
       - name: Commit snapshot if changed

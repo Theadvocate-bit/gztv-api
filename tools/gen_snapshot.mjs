@@ -7,7 +7,7 @@
 // a large page of the default list and filter client-side, exactly as
 // the edge runtime does.
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 
 const BASE = 'https://haiwaiapi.1fc8ab0.com';
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148';
@@ -29,9 +29,13 @@ async function post(path, body) {
 
 const TYPES = [1, 2, 3, 4, 64, 30, 39, 40, 70, 71, 72, 73, 74];
 const PER_TYPE = 30;
-const PAGE_SIZE = 240;
-const MAX_PAGES = 40;
+const PAGE_SIZE = 50;   // upstream caps pageSize at 50 regardless of request
+const MAX_PAGES = 40;   // safety bound; fetch stops early once every type is filled
 const DETAIL_TOP_N = 5;
+// Minimum items across all types for a snapshot to be considered valid.
+// Guards against upstream partial failures overwriting a good snapshot with
+// an empty/near-empty one and silently breaking the EdgeOne fallback.
+const MIN_TOTAL_ITEMS = 20;
 
 const snapshot = {
   generated_at: new Date().toISOString(),
@@ -42,14 +46,15 @@ const snapshot = {
 };
 
 // Fetch a big default list, then client-side filter by t_id.
-// The upstream ignores all filter params, so we do the same thing the edge code does.
-// Upstream caps pageSize at ~50 regardless of what we ask, so iterate pages.
+// The upstream ignores all filter params (column / type / pageSize caps), so we
+// iterate the full default feed. Niche types (64/30/40/70-74, and 39) appear
+// late or not at all in the feed, so we must NOT stop early — stopping after
+// the popular types fill would silently drop them from the fallback snapshot.
 async function fetchAll() {
   const items = [];
-  const requested = 50;
   for (let page = 1; page <= MAX_PAGES; page++) {
     const raw = await post('/Pc/Search/GetConditionList', {
-      page, pageSize: requested
+      page, pageSize: PAGE_SIZE
     });
     const list = (raw.data && raw.data.list) || [];
     items.push(...list);
@@ -119,6 +124,28 @@ try {
 }
 
 mkdirSync('data', { recursive: true });
+
+// Validity gate: refuse to write a degenerate snapshot that would silently
+// break the EdgeOne fallback. Compare against the existing snapshot on disk.
+const totalItems = Object.values(snapshot.list).reduce((n, b) => n + b.items.length, 0);
+const existingPath = 'data/snapshot.json';
+let existingTotal = 0;
+try {
+  const existing = JSON.parse(readFileSync(existingPath, 'utf8'));
+  existingTotal = Object.values(existing.list || {}).reduce((n, b) => n + (b.items?.length || 0), 0);
+} catch (_) { /* no existing snapshot */ }
+
+if (totalItems < MIN_TOTAL_ITEMS) {
+  console.error(`\nABORT: snapshot has only ${totalItems} items (< ${MIN_TOTAL_ITEMS}). ` +
+    `Upstream likely partial/blocked. Keeping existing snapshot (${existingTotal} items).`);
+  process.exit(1);
+}
+if (existingTotal > 0 && totalItems < existingTotal * 0.5) {
+  console.error(`\nABORT: new snapshot (${totalItems}) is <50% of existing (${existingTotal}). ` +
+    `Likely upstream degradation. Keeping existing snapshot.`);
+  process.exit(1);
+}
+
 const raw = JSON.stringify(snapshot);
 writeFileSync('data/snapshot.json', raw);
 // Also emit a JS module for the EdgeOne bundle.
