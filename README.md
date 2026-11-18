@@ -10,19 +10,33 @@
 
 ## 1. 快速使用
 
+**线上实例**（overseas 区，非中国大陆）：
+
+- 自定义域名：`https://appcms.kili.kdns.fr`
+- EdgeOne 预设域名：`https://gztv-api.edgeone.dev`
+
+**采集端配置**（TVBox / MoonTV / LunaTV 等 AppCMS V10 客户端）：
+
+```json
+{ "name": "瓜子影视", "api": "https://appcms.kili.kdns.fr/" }
+```
+
+> ⚠️ 末尾 `/` 必须带——客户端会把 `?ac=list` 等参数拼在后面。
+> `/api.php/provide/vod` 在 EdgeOne Makers 上不可用（文件即路由不支持带点号路径），一律用根路径 `/`。
+
 ```bash
 # 健康检查
-curl 'https://<YOUR-EDGEONE-HOST>/?'
+curl 'https://appcms.kili.kdns.fr/?'
 # 列表（首页）
-curl 'https://<YOUR-EDGEONE-HOST>/?ac=list&page=1&limit=20'
+curl 'https://appcms.kili.kdns.fr/?ac=list&page=1&limit=20'
 # 分类：电影
-curl 'https://<YOUR-EDGEONE-HOST>/?ac=list&type_id=1&limit=10'
+curl 'https://appcms.kili.kdns.fr/?ac=list&type_id=1&limit=10'
 # 详情：AppCMS 标准参数 ids=
-curl 'https://<YOUR-EDGEONE-HOST>/?ac=detail&ids=3'
+curl 'https://appcms.kili.kdns.fr/?ac=detail&ids=3'
 # 直链解析
-curl 'https://<YOUR-EDGEONE-HOST>/play?vod_id=3&episode=1'
+curl 'https://appcms.kili.kdns.fr/play?vod_id=3&episode=1'
 # m3u8 代理
-curl 'https://<YOUR-EDGEONE-HOST>/api/m3u8?url=https%3A%2F%2Fexample.com%2Fa.m3u8'
+curl 'https://appcms.kili.kdns.fr/api/m3u8?url=https%3A%2F%2Fexample.com%2Fa.m3u8'
 ```
 
 ## 2. 分类对照（`type_id` 直接透传 gztv5 的 `t_id`）
