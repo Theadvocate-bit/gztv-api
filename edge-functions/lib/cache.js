@@ -3,6 +3,9 @@
 
 const store = new Map();
 const MAX = 512;
+// In-flight fetchers keyed by cache key. Coalesces concurrent misses so a
+// cold popular key triggers one upstream call, not one per simultaneous request.
+const inflight = new Map();
 
 function env() {
   try { return (typeof process !== 'undefined' && process.env) || globalThis.env || {}; }
@@ -46,25 +49,50 @@ export async function getCached(key, ttlMs, fetcher) {
     } catch (_) { /* fall through */ }
   }
 
-  const value = await fetcher();
-  const entry = { value, exp: Date.now() + ttlMs };
-  touch(key, entry);
-
-  if (upstreamUrl && upstreamKey) {
-    try {
-      await fetch(`${upstreamUrl}/${encodeURIComponent(key)}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': `max-age=${Math.floor(ttlMs / 1000)}`,
-          Authorization: `Bearer ${upstreamKey}`
-        },
-        body: JSON.stringify(entry)
-      });
-    } catch (_) { /* best effort */ }
+  // Coalesce: if another caller is already fetching this key, ride its promise.
+  if (inflight.has(key)) {
+    return inflight.get(key);
   }
 
-  return value;
+  const task = (async () => {
+    let value;
+    try {
+      value = await fetcher();
+    } catch (e) {
+      // Stale-while-revalidate: on upstream failure, serve the expired value
+      // (fresher than the static snapshot) if we have one.
+      if (hit) {
+        touch(key, hit);
+        return hit.value;
+      }
+      throw e;
+    }
+    const entry = { value, exp: Date.now() + ttlMs };
+    touch(key, entry);
+
+    if (upstreamUrl && upstreamKey) {
+      try {
+        await fetch(`${upstreamUrl}/${encodeURIComponent(key)}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': `max-age=${Math.floor(ttlMs / 1000)}`,
+            Authorization: `Bearer ${upstreamKey}`
+          },
+          body: JSON.stringify(entry)
+        });
+      } catch (_) { /* best effort */ }
+    }
+
+    return value;
+  })();
+
+  inflight.set(key, task);
+  try {
+    return await task;
+  } finally {
+    inflight.delete(key);
+  }
 }
 
 export function clearCache() {

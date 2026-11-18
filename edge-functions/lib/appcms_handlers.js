@@ -222,9 +222,15 @@ export async function handlePlay(request) {
   if (source !== 'gztv5') return okBody({ error: `Unknown source: ${source}` });
 
   const cacheKey = `play:${vodId}`;
-  const { urls } = await getCached(cacheKey, DETAIL_TTL, () =>
-    getOnePlayList(vodId, { maxPages: 20 })
-  );
+  const { urls } = await getCached(cacheKey, DETAIL_TTL, async () => {
+    try {
+      return await getOnePlayList(vodId, { maxPages: 20 });
+    } catch (_) {
+      // Upstream unreachable — fall back to bundled snapshot episodes
+      const snap = snapshotDetail(vodId);
+      return { urls: (snap && snap.playList) || [], total: (snap && snap.playList || []).length };
+    }
+  });
 
   const ep = urls.find(u => Number(u.sort) === episode) || urls[0];
   if (!ep) return okBody({ error: 'Episode not found' });
